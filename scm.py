@@ -9,7 +9,7 @@ import random
 import dill
 import torch
 import numpy as np
-from playground_scm.utils import torch_random_choice
+from utils.math_helpers import torch_random_choice
 
 class StructuralCausalModel:
     """
@@ -81,11 +81,14 @@ class StructuralCausalModel:
         """
         # all names are uppercase
         name = name.upper()
+        # ensure unique names
+        # assert name not in self.exogenous_vars.keys(), 'Variable already exists'
+        # assert name not in self.endogenous_vars.keys(), 'Variable already exists in endogenous vars'
 
         self.exogenous_vars[name] = None
         self.exogenous_distributions[name] = (distribution, distribution_kwargs)
 
-    def add_exogenous_vars(self, vars: List[Tuple[str, Any, Callable, dict]]):
+    def add_exogenous_vars(self, vars: List[Tuple[str, Any, Callable, dict]]):          # Type hint should be List[Tuple[str, Callable, dict]]
         """
         Adds a list of exogenous variables to the SCM.
 
@@ -262,8 +265,54 @@ class StructuralCausalModel:
         values = dict(self.endogenous_vars), dict(self.exogenous_vars)
         values = dict(values[0], **values[1])
         nx.draw(graph, arrowsize=20, with_labels=True, node_size=3000, font_size=10,
-                labels={key: str(key) + ':\n' + str(values[key]) for key in values}, pos=nx.planar_layout(graph))
+                labels={key: str(key) + ':\n' + str(values[key]) for key in values}, pos=nx.planar_layout(graph))           # raise nx.NetworkXException("G is not planar.")
         plt.show()
+
+    def resample_endogenous_nodes(
+        self,
+        nodes: List[str] | None = None,
+        *,
+        noise: bool = True,
+        activation: bool = True,
+        layers: bool = True,
+        seed: int | None = None,
+        per_node_kwargs: Dict[str, Dict] | None = None,
+    ) -> None:
+        """Convenience wrapper to resample structural equations for selected endogenous nodes.
+
+        For each selected node, if the function supports a combined resample_scm_equation, it is used.
+
+        Args:
+            nodes: List of node names to resample. Defaults to all endogenous nodes.
+            noise: Resample noise component.
+            activation: Resample activation function.
+            layers: Reinitialize layers/weights.
+            seed: Global seed unless overridden per node via per_node_kwargs.
+            per_node_kwargs: Optional per-node overrides, e.g. {'Y': {'activation': True, 'seed': 123}}.
+        """
+        target_names = nodes if nodes is not None else list(self.endogenous_vars.keys())
+        per_node_kwargs = per_node_kwargs or {}
+
+        for name in target_names:
+            # Only consider endogenous nodes that exist in this SCM
+            if name not in self.endogenous_vars:
+                continue
+            if name not in self.functions:
+                continue
+
+            fn = self.functions[name][0]  # Structural equation (callable)
+            overrides = per_node_kwargs.get(name, {})
+            n_flag = overrides.get("noise", noise)
+            a_flag = overrides.get("activation", activation)
+            l_flag = overrides.get("layers", layers)
+            node_seed = overrides.get("seed", seed)
+
+            if hasattr(fn, "resample_scm_equation") and callable(getattr(fn, "resample_scm_equation")):
+                fn.resample_scm_equation(noise=n_flag, activation=a_flag, layers=l_flag, seed=node_seed)
+
+    def resample_all_endogenous_nodes(self, **kwargs) -> None:
+        """Resample structural equations for all endogenous nodes (alias to resample_nodes)."""
+        self.resample_endogenous_nodes(nodes=None, **kwargs)
 
     def save(self, filepath: str, verbose: int = 0) -> None:
         """

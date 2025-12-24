@@ -9,7 +9,7 @@ from tqdm import tqdm
 import pickle
 import dill
 import warnings
-from playground_scm.scm import StructuralCausalModel
+from scm.scm import StructuralCausalModel
 import numpy as np
 
 
@@ -88,7 +88,7 @@ class SCMGenerator:
         return scms
 
     def create_scm_from_graph(self, graph: nx.DiGraph, possible_functions: List[str], exo_distribution: Callable,
-                              exo_distribution_kwargs: dict, zero_one_treatment: bool) -> StructuralCausalModel:
+                              exo_distribution_kwargs: dict, zero_one_treatment: bool = False) -> StructuralCausalModel:
         """
         Generates an SCM following the structure of a given directed graph. A function is randomly chosen from
         `possible_functions` for each edge in the graph.
